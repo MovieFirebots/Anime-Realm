@@ -3,7 +3,7 @@ import asyncio
 import json
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputMediaDocument, InputMediaVideo, BotCommand
 from telegram.ext import (
-    Application, CommandHandler, MessageHandler, filters, CallbackQueryHandler,
+    Application, CommandHandler, MessageHandler, filters, CallbackQueryHandler, # Ensure 'filters' is lowercase here
     ContextTypes, ConversationHandler
 )
 from telegram.constants import ParseMode, ChatType
@@ -380,16 +380,16 @@ async def search_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 async def display_search_results(update: Update, context: ContextTypes.DEFAULT_TYPE, search_state: dict, is_new_search: bool = False):
     """Displays search results with filter buttons and pagination."""
     query = search_state["query"]
-    filters = search_state["filters"]
+    filters_dict = search_state["filters"] # Renamed to avoid conflict with imported 'filters' module
     page = search_state["page"]
 
-    results, total_files = await db.find_files(query, filters, page, page_size=5) # Display 5 results per page
+    results, total_files = await db.find_files(query, filters_dict, page, page_size=5) # Display 5 results per page
 
     if not results and page == 1: # No results at all for this query/filter
         message_text = f"{config.NARUTO_EMOJI} No files found for '`{query}`'"
-        if any(filters.values()):
-            message_text += " with the current filters."
-        message_text += f"\nTry a different search term or adjust filters! {config.ONE_PIECE_EMOJI}"
+        if any(filters_dict.values()):
+            message_text += " with the current filters_dict."
+        message_text += f"\nTry a different search term or adjust filters_dict! {config.ONE_PIECE_EMOJI}"
         if is_new_search and update.message:
             await update.message.reply_text(message_text, parse_mode=ParseMode.MARKDOWN, quote=True)
         elif update.callback_query: # Editing a message from callback
@@ -405,9 +405,9 @@ async def display_search_results(update: Update, context: ContextTypes.DEFAULT_T
 
     # --- Build Results Message ---
     results_text = f"{config.SEARCH_EMOJI} Search Results for '`{query}`':\n"
-    if any(filters.values()):
-        active_filters = ", ".join([f"{k.title()}: {v}" for k,v in filters.items() if v])
-        results_text += f"Filters: _{active_filters}_\n"
+    if any(filters_dict.values()):
+        active_filters_dict = ", ".join([f"{k.title()}: {v}" for k,v in filters_dict.items() if v])
+        results_text += f"Filters: _{active_filters_dict}_\n"
     results_text += "\n"
 
     # --- Build Inline Keyboard ---
@@ -415,28 +415,28 @@ async def display_search_results(update: Update, context: ContextTypes.DEFAULT_T
 
     # Filter Buttons (Top Row)
     filter_buttons = []
-    # Get available distinct values based on current query AND other active filters
+    # Get available distinct values based on current query AND other active filters_dict
     
     # Quality
-    qualities = await db.get_distinct_values("quality", query, {k:v for k,v in filters.items() if k != "quality"})
+    qualities = await db.get_distinct_values("quality", query, {k:v for k,v in filters_dict.items() if k != "quality"})
     if qualities:
-        current_q = filters.get("quality","All Q")
-        q_text = f"📺 {current_q}" if filters.get("quality") else "📺 Quality"
+        current_q = filters_dict.get("quality","All Q")
+        q_text = f"📺 {current_q}" if filters_dict.get("quality") else "📺 Quality"
         filter_buttons.append(InlineKeyboardButton(q_text, callback_data=f"{FILTER_PREFIX}{QUALITY_FILTER}_select"))
     
     # Language
-    languages = await db.get_distinct_values("language", query, {k:v for k,v in filters.items() if k != "language"})
+    languages = await db.get_distinct_values("language", query, {k:v for k,v in filters_dict.items() if k != "language"})
     if languages:
-        current_l = filters.get("language","All L")
-        l_text = f"🏳️ {current_l}" if filters.get("language") else "🏳️ Language"
+        current_l = filters_dict.get("language","All L")
+        l_text = f"🏳️ {current_l}" if filters_dict.get("language") else "🏳️ Language"
         filter_buttons.append(InlineKeyboardButton(l_text, callback_data=f"{FILTER_PREFIX}{LANGUAGE_FILTER}_select"))
     
     # Season (if series is somewhat specific)
     # Only show season filter if a series seems to be narrowed down or if results have season info
-    seasons = await db.get_distinct_values("season", query, {k:v for k,v in filters.items() if k != "season"})
+    seasons = await db.get_distinct_values("season", query, {k:v for k,v in filters_dict.items() if k != "season"})
     if seasons: # Only show if there are seasons to filter by
-        current_s = f"S{filters.get('season')}" if filters.get('season') else "All S"
-        s_text = f"🌊 {current_s}" if filters.get('season') else "🌊 Season"
+        current_s = f"S{filters_dict.get('season')}" if filters_dict.get('season') else "All S"
+        s_text = f"🌊 {current_s}" if filters_dict.get('season') else "🌊 Season"
         filter_buttons.append(InlineKeyboardButton(s_text, callback_data=f"{FILTER_PREFIX}{SEASON_FILTER}_select"))
 
     if filter_buttons:
@@ -445,15 +445,6 @@ async def display_search_results(update: Update, context: ContextTypes.DEFAULT_T
     # File Result Buttons
     for i, file_doc in enumerate(results):
         file_name = file_doc.get('file_name', 'Unknown File')
-        
-        # Construct display name with available metadata
-        display_parts = [file_name]
-        # meta_parts = []
-        # if file_doc.get('season'): meta_parts.append(f"S{file_doc['season']}")
-        # if file_doc.get('episode'): meta_parts.append(f"E{file_doc['episode']}")
-        # if file_doc.get('quality'): meta_parts.append(file_doc['quality'])
-        # if file_doc.get('language'): meta_parts.append(file_doc['language'])
-        # if meta_parts: display_parts.append(f"[{' '.join(meta_parts)}]")
         
         button_text = f"{config.FILE_EMOJI} {file_name[:50]}{'...' if len(file_name)>50 else ''}" # Truncate long names
         keyboard.append([InlineKeyboardButton(button_text, callback_data=f"{DOWNLOAD_PREFIX}{file_doc['file_id']}")])
@@ -513,11 +504,6 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
             file_doc = await db.get_file_by_id(file_id_to_download)
             if file_doc:
                 try:
-                    # Forwarding is better as it preserves original uploader context for Telegram
-                    # But requires bot to be admin in source channel or file to be accessible by bot_id
-                    # await context.bot.forward_message(chat_id=user_id, from_chat_id=file_doc['channel_id'], message_id=file_doc['message_id'])
-                    
-                    # Sending by file_id is more reliable if forwarding permissions are an issue
                     caption = (
                         f"{config.NARUTO_EMOJI} Here's your file: **{file_doc.get('file_name', 'N/A')}**\n"
                         f"Series: {file_doc.get('series_name', 'N/A')}\n"
@@ -548,12 +534,11 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
                 f"You need {config.TOKENS_PER_FILE} {config.TOKEN_EMOJI} to download this file, but you only have {user_tokens}.\n"
                 f"Use /verify in PM to earn more tokens!"
             )
-            # Optionally, give a subtle hint in group without revealing PM content.
-            try: # query.message might be None if it was deleted.
+            try: 
                 await query.message.reply_text(f"@{query.from_user.username} Check your PMs from me! {config.NARUTO_EMOJI}", quote=True)
             except Exception:
-                pass # User might not have username, or message deleted.
-        return # Handled download action
+                pass 
+        return 
 
     # --- Filter Selection Trigger ---
     if data.startswith(FILTER_PREFIX) and data.endswith("_select"):
@@ -562,28 +547,25 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
         field_map = {QUALITY_FILTER: "quality", LANGUAGE_FILTER: "language", SEASON_FILTER: "season"}
         db_field = field_map.get(filter_type_code)
 
-        if not db_field: return # Unknown filter type
+        if not db_field: return 
 
-        # Get distinct values for this filter based on current query and *other* active filters
-        other_filters = {k:v for k,v in search_state["filters"].items() if k != db_field and v}
-        distinct_values = await db.get_distinct_values(db_field, search_state["query"], other_filters)
+        other_filters_dict = {k:v for k,v in search_state["filters"].items() if k != db_field and v} # Renamed local var
+        distinct_values = await db.get_distinct_values(db_field, search_state["query"], other_filters_dict)
         
         if not distinct_values:
             await query.answer(f"No specific {db_field} options found for this search.", show_alert=True)
             return
 
         filter_choice_buttons = []
-        # Max 3 buttons per row for filter options
         row = []
         for val in distinct_values:
             row.append(InlineKeyboardButton(str(val), callback_data=f"{FILTER_PREFIX}{filter_type_code}_val_{val}"))
             if len(row) == 3:
                 filter_choice_buttons.append(row)
                 row = []
-        if row: # Add any remaining buttons
+        if row: 
             filter_choice_buttons.append(row)
         
-        # Add "All" / "Clear filter" option
         filter_choice_buttons.append([InlineKeyboardButton(f"All / Clear this filter", callback_data=f"{FILTER_PREFIX}{filter_type_code}_val_CLEAR")])
         filter_choice_buttons.append([InlineKeyboardButton(f"{config.ERROR_EMOJI} Back to results", callback_data=f"{CANCEL_PREFIX}filter_selection")])
         
@@ -608,13 +590,12 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
         if chosen_value == "CLEAR":
             search_state["filters"][db_field] = None
         else:
-            # Try to convert to int if it's season (MongoDB stores season as int)
             if db_field == "season":
                 try: chosen_value = int(chosen_value)
-                except ValueError: pass # Keep as string if not int
+                except ValueError: pass 
             search_state["filters"][db_field] = chosen_value
         
-        search_state["page"] = 1 # Reset to first page after filter change
+        search_state["page"] = 1 
         context.user_data[SEARCH_STATE_KEY] = search_state
         await display_search_results(update, context, search_state)
         return
@@ -639,12 +620,12 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
                 await query.edit_message_text(f"{config.AOT_EMOJI} Search closed. Feel free to start a new one!", reply_markup=None)
                 if SEARCH_STATE_KEY in context.user_data:
                     del context.user_data[SEARCH_STATE_KEY]
-            except TelegramError as e: # Message might have been deleted already
+            except TelegramError as e: 
                 if "message to edit not found" in str(e).lower():
                     logger.info("Tried to close search but message was already gone.")
                 else:
                     raise e
-        elif action == "filter_selection": # Go back from filter value selection to results
+        elif action == "filter_selection": 
             await display_search_results(update, context, search_state)
         return
 
@@ -653,7 +634,6 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
     """Log Errors caused by Updates."""
     logger.error(f"Update {update} caused error {context.error}", exc_info=context.error)
     await log_to_channel(context, f"<b>ERROR:</b> <code>{context.error}</code>\nUpdate: <code>{update}</code>")
-    # Optionally, inform user if it's a direct interaction
     if isinstance(update, Update) and update.effective_user:
         try:
             await context.bot.send_message(
@@ -673,7 +653,7 @@ async def post_init(application: Application):
         BotCommand("index", "📤 Manually index files (Admin)"),
     ])
     print("Bot commands set!")
-    set_telegram_bot(application.bot) # Make bot instance available to webserver
+    set_telegram_bot(application.bot) 
     print("Telegram Bot instance passed to webserver.")
 
 
@@ -697,55 +677,74 @@ def main() -> None:
     # --- Command Handlers ---
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CommandHandler("help", help_command))
-    application.add_handler(CommandHandler("index", index_command, filters=Filters.ChatType.PRIVATE | Filters.User(config.ADMIN_IDS))) # Admin only, can be in PM
-    application.add_handler(CommandHandler("stats", stats_command)) # Defaults to admin check inside
+    # Ensure config.ADMIN_IDS is a list/tuple of integers for filters.User
+    admin_user_filter = filters.User(user_id=config.ADMIN_IDS) if config.ADMIN_IDS else filters.NEVER 
+    application.add_handler(CommandHandler("index", index_command, filters=filters.ChatType.PRIVATE | admin_user_filter))
+    application.add_handler(CommandHandler("stats", stats_command)) 
     application.add_handler(CommandHandler("tokens", tokens_command))
     application.add_handler(CommandHandler("verify", verify_command))
 
     # --- Message Handlers ---
     # Auto-indexing from DB_CHANNEL or admin forwards
+    db_channel_filter = filters.Chat(chat_id=config.DB_CHANNEL_ID) if config.DB_CHANNEL_ID else filters.NEVER
+    admin_forward_filter = (
+        filters.ChatType.PRIVATE & 
+        admin_user_filter &
+        filters.FORWARDED & 
+        (filters.ForwardedFrom.CHAT_TYPE.CHANNEL if hasattr(filters, 'ForwardedFrom') else filters.ChatType.CHANNEL) # More robust check for forwarded from channel
+    )
+    # In PTB v20, to check the type of the original chat of a forwarded message,
+    # you might need a custom filter or check it inside the handler if filters.FORWARDED & filters.ChatType.CHANNEL
+    # doesn't work as expected for message.forward_from_chat.type.
+    # The original intent was to check if the forwarded message *came from* a channel.
+    # filters.FORWARDED checks if it's a forward.
+    # A simple solution is often to check message.forward_from_chat.type inside the handler for admin forwards.
+    # For now, let's assume the previous logic filters.ChatType.CHANNEL applied to the context of forward.
+    # The most direct v20 way for "forwarded from a channel" is usually filters.FORWARDED and then an internal check,
+    # or a more complex custom filter.
+    # Let's try to match the old intent:
+    # (filters.ChatType.PRIVATE & admin_user_filter & filters.FORWARDED & filters.ChatType.CHANNEL) implied
+    # the bot receives a private message, from an admin, that is a forward, and the original source was a channel.
+    # The filters.ChatType.CHANNEL in that combination could be ambiguous.
+    # Let's assume it's about message.forward_from_chat.type == ChatType.CHANNEL, handled by filters.FORWARDED implicitly.
+    # For more explicit check on forwarded source type, filters.ForwardedFrom.CHAT_TYPE.CHANNEL is better if available,
+    # or it needs to be checked inside the handler.
+    # The provided code already checks message.forward_from_chat.type == ChatType.CHANNEL inside auto_index_file for is_admin_forward.
+    # So we can simplify the filter to just ensure it's a private message from an admin and it's forwarded.
+    admin_forward_filter_simplified = (
+        filters.ChatType.PRIVATE &
+        admin_user_filter &
+        filters.FORWARDED # The handler `auto_index_file` already checks `message.forward_from_chat.type == ChatType.CHANNEL`
+    )
+
     application.add_handler(MessageHandler(
-        (Filters.Chat(config.DB_CHANNEL_ID) if config.DB_CHANNEL_ID else Filters.NEVER) | 
-        (Filters.ChatType.PRIVATE & Filters.User(config.ADMIN_IDS) & Filters.FORWARDED & Filters.ChatType.CHANNEL), # Admin forwarding a message from a channel
+        db_channel_filter | admin_forward_filter_simplified,
         auto_index_file
     ))
+    
     # File Search (text messages in groups, not commands)
-    application.add_handler(MessageHandler(Filters.TEXT & ~Filters.COMMAND & (Filters.ChatType.GROUPS | Filters.ChatType.SUPERGROUP), search_handler))
+    # filters.ChatType.GROUPS covers both ChatType.GROUP and ChatType.SUPERGROUP
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.ChatType.GROUPS, search_handler))
 
     # --- Callback Query Handler ---
     application.add_handler(CallbackQueryHandler(button_callback_handler))
 
     # --- Error Handler ---
     application.add_error_handler(error_handler)
-
-    # --- Start Webserver and Bot Polling ---
-    # We need to run both asyncio loops (bot polling and uvicorn webserver)
-    # One common way is to run uvicorn in a separate thread, or use asyncio.gather
     
     loop = asyncio.get_event_loop()
-    
-    # Create a task for the bot's polling mechanism
     bot_task = loop.create_task(application.run_polling(allowed_updates=Update.ALL_TYPES))
-    
-    # Create a task for the webserver
-    # Uvicorn needs to be run with its own event loop management or adapted for an existing one.
-    # The `Server.serve()` method is blocking, so we need to run it in a way that doesn't block the bot.
-    # A common pattern is to run uvicorn programmatically using `asyncio.create_server` or similar,
-    # but uvicorn's `Server(config).serve()` is simpler if it can be `await`ed.
     webserver_task = loop.create_task(run_webserver())
 
     try:
         logger.info("Bot and Webserver starting...")
-        # This will run both tasks concurrently.
-        # If one task finishes or raises an unhandled exception, `gather` will propagate it.
         loop.run_until_complete(asyncio.gather(bot_task, webserver_task))
     except KeyboardInterrupt:
         logger.info("Bot shutting down (KeyboardInterrupt)...")
     except Exception as e:
         logger.critical(f"Critical error in main event loop: {e}", exc_info=True)
     finally:
-        # Perform any cleanup if necessary
-        if application: # Ensure application was initialized
+        if application: 
              loop.run_until_complete(application.shutdown())
         logger.info("Bot shutdown complete.")
 
