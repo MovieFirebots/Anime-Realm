@@ -1,0 +1,8 @@
+python-telegram-bot[ext]>=20.7,<21.0 
+# PTB v20.7 has good asyncio integration and stability. Adjust as needed.
+# Remove [ext] if you don't need httpx integration for webhooks, but we do for webserver.
+pymongo>=4.0
+python-dotenv
+fastapi>=0.95.0
+uvicorn[standard]>=0.20.0 # [standard] includes typical webserver dependencies
+httpx>=0.23.0 # For making HTTP requests (Modiji API, also PTB can use it)
