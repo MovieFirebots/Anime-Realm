@@ -678,50 +678,30 @@ def main() -> None:
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CommandHandler("help", help_command))
     # Ensure config.ADMIN_IDS is a list/tuple of integers for filters.User
-    admin_user_filter = filters.User(user_id=config.ADMIN_IDS) if config.ADMIN_IDS else filters.NEVER 
+    admin_user_filter = filters.User(user_id=config.ADMIN_IDS) if config.ADMIN_IDS else filters.NEVER
     application.add_handler(CommandHandler("index", index_command, filters=filters.ChatType.PRIVATE | admin_user_filter))
-    application.add_handler(CommandHandler("stats", stats_command)) 
+    application.add_handler(CommandHandler("stats", stats_command))
     application.add_handler(CommandHandler("tokens", tokens_command))
     application.add_handler(CommandHandler("verify", verify_command))
 
     # --- Message Handlers ---
     # Auto-indexing from DB_CHANNEL or admin forwards
     db_channel_filter = filters.Chat(chat_id=config.DB_CHANNEL_ID) if config.DB_CHANNEL_ID else filters.NEVER
+
+    # Corrected definition for admin_forward_filter:
     admin_forward_filter = (
-        filters.ChatType.PRIVATE & 
-        admin_user_filter &
-        filters.FORWARDED & 
-        (filters.ForwardedFrom.CHAT_TYPE.CHANNEL if hasattr(filters, 'ForwardedFrom') else filters.ChatType.CHANNEL) # More robust check for forwarded from channel
-    )
-    # In PTB v20, to check the type of the original chat of a forwarded message,
-    # you might need a custom filter or check it inside the handler if filters.FORWARDED & filters.ChatType.CHANNEL
-    # doesn't work as expected for message.forward_from_chat.type.
-    # The original intent was to check if the forwarded message *came from* a channel.
-    # filters.FORWARDED checks if it's a forward.
-    # A simple solution is often to check message.forward_from_chat.type inside the handler for admin forwards.
-    # For now, let's assume the previous logic filters.ChatType.CHANNEL applied to the context of forward.
-    # The most direct v20 way for "forwarded from a channel" is usually filters.FORWARDED and then an internal check,
-    # or a more complex custom filter.
-    # Let's try to match the old intent:
-    # (filters.ChatType.PRIVATE & admin_user_filter & filters.FORWARDED & filters.ChatType.CHANNEL) implied
-    # the bot receives a private message, from an admin, that is a forward, and the original source was a channel.
-    # The filters.ChatType.CHANNEL in that combination could be ambiguous.
-    # Let's assume it's about message.forward_from_chat.type == ChatType.CHANNEL, handled by filters.FORWARDED implicitly.
-    # For more explicit check on forwarded source type, filters.ForwardedFrom.CHAT_TYPE.CHANNEL is better if available,
-    # or it needs to be checked inside the handler.
-    # The provided code already checks message.forward_from_chat.type == ChatType.CHANNEL inside auto_index_file for is_admin_forward.
-    # So we can simplify the filter to just ensure it's a private message from an admin and it's forwarded.
-    admin_forward_filter_simplified = (
         filters.ChatType.PRIVATE &
         admin_user_filter &
-        filters.FORWARDED # The handler `auto_index_file` already checks `message.forward_from_chat.type == ChatType.CHANNEL`
+        filters.FORWARDED
+        # The check 'message.forward_from_chat.type == ChatType.CHANNEL'
+        # is correctly handled inside the auto_index_file function.
     )
 
     application.add_handler(MessageHandler(
-        db_channel_filter | admin_forward_filter_simplified,
+        db_channel_filter | admin_forward_filter,
         auto_index_file
     ))
-    
+
     # File Search (text messages in groups, not commands)
     # filters.ChatType.GROUPS covers both ChatType.GROUP and ChatType.SUPERGROUP
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.ChatType.GROUPS, search_handler))
@@ -731,7 +711,7 @@ def main() -> None:
 
     # --- Error Handler ---
     application.add_error_handler(error_handler)
-    
+
     loop = asyncio.get_event_loop()
     bot_task = loop.create_task(application.run_polling(allowed_updates=Update.ALL_TYPES))
     webserver_task = loop.create_task(run_webserver())
@@ -744,7 +724,7 @@ def main() -> None:
     except Exception as e:
         logger.critical(f"Critical error in main event loop: {e}", exc_info=True)
     finally:
-        if application: 
+        if application:
              loop.run_until_complete(application.shutdown())
         logger.info("Bot shutdown complete.")
 
